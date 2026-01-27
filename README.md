@@ -1,2 +1,3 @@
 # Multi-mine
-This is a Python base multiplayer version of Minesweeper.
+
+Placeholder README for the pygame minesweeper project structure.
