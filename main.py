@@ -1,38 +1,42 @@
 # main.py
 import pygame
 
-from config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
+from config import (
+    COLOR_BG,
+    COLOR_PANEL,
+    COLOR_TEXT,
+    FPS,
+    GRID_COLS,
+    GRID_OFFSET_X,
+    GRID_OFFSET_Y,
+    GRID_ROWS,
+    MINE_COUNT,
+    MINE_PENALTY_POINTS,
+    SAFE_REVEAL_POINTS,
+    SCREEN_HEIGHT,
+    SCREEN_WIDTH,
+    TILE_SIZE,
+)
+from src.game.grid.tiles import Minefield
 from src.game.players.player import Player, PlayerConfig
 
 
-MENU_ITEMS = ["Start Game", "Settings", "Quit"]
+def _player_grid_pos(player: Player, offset_x: int, offset_y: int, tile_size: int) -> tuple[int, int] | None:
+    cx, cy = player.rect.center
+    gx = int((cx - offset_x) // tile_size)
+    gy = int((cy - offset_y) // tile_size)
+    if gx < 0 or gy < 0:
+        return None
+    return (gy, gx)
 
 
-class ScreenState:
-    MENU = "menu"
-    GAME = "game"
-    SETTINGS = "settings"
-
-
-def _draw_centered_text(
-    surface: pygame.Surface,
-    text: str,
-    font: pygame.font.Font,
-    color: tuple[int, int, int],
-    y: int,
-) -> None:
-    rendered = font.render(text, True, color)
-    rect = rendered.get_rect(center=(surface.get_width() // 2, y))
-    surface.blit(rendered, rect)
-
-
-def main():
+def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption("Multi-Mine")
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont("consolas", 28)
-    title_font = pygame.font.SysFont("consolas", 48, bold=True)
+
+    font = pygame.font.SysFont(None, 24)
 
     # Screen bounds for clamping players
     screen_rect = screen.get_rect()
@@ -43,123 +47,121 @@ def main():
 
     player1 = Player(
         config=p1_config,
-        start_pos=(100, 100),
-        color=(0, 200, 255),  # blue
+        start_pos=(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 10),
+        color=(0, 200, 255),
     )
 
     player2 = Player(
         config=p2_config,
-        start_pos=(600, 400),
-        color=(255, 100, 100),  # red
+        start_pos=(GRID_OFFSET_X + 200, GRID_OFFSET_Y + 10),
+        color=(255, 100, 100),
     )
 
-    state = ScreenState.MENU
-    menu_index = 0
+    minefield = Minefield(
+        rows=GRID_ROWS,
+        cols=GRID_COLS,
+        tile_size=TILE_SIZE,
+        mine_count=MINE_COUNT,
+        offset=(GRID_OFFSET_X, GRID_OFFSET_Y),
+    )
 
     running = True
     while running:
-        # Delta time (seconds)
         dt = clock.tick(FPS) / 1000.0
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
-
             if event.type == pygame.KEYDOWN:
-                if state == ScreenState.MENU:
-                    if event.key in (pygame.K_UP, pygame.K_w):
-                        menu_index = (menu_index - 1) % len(MENU_ITEMS)
-                    elif event.key in (pygame.K_DOWN, pygame.K_s):
-                        menu_index = (menu_index + 1) % len(MENU_ITEMS)
-                    elif event.key in (pygame.K_RETURN, pygame.K_SPACE):
-                        selected = MENU_ITEMS[menu_index]
-                        if selected == "Start Game":
-                            state = ScreenState.GAME
-                        elif selected == "Settings":
-                            state = ScreenState.SETTINGS
-                        elif selected == "Quit":
-                            running = False
-                elif event.key == pygame.K_ESCAPE:
-                    state = ScreenState.MENU
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                if event.key == pygame.K_r:
+                    minefield.reset()
+                if event.key == pygame.K_e:
+                    pos = _player_grid_pos(player1, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                    if pos is not None:
+                        result = minefield.reveal_tile(*pos)
+                        if result == "safe":
+                            player1.add_score(SAFE_REVEAL_POINTS)
+                        elif result == "mine":
+                            player1.add_score(-MINE_PENALTY_POINTS)
+                if event.key == pygame.K_q:
+                    pos = _player_grid_pos(player1, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                    if pos is not None:
+                        minefield.toggle_flag(*pos)
+                if event.key == pygame.K_RETURN:
+                    pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                    if pos is not None:
+                        result = minefield.reveal_tile(*pos)
+                        if result == "safe":
+                            player2.add_score(SAFE_REVEAL_POINTS)
+                        elif result == "mine":
+                            player2.add_score(-MINE_PENALTY_POINTS)
+                if event.key == pygame.K_RSHIFT:
+                    pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                    if pos is not None:
+                        minefield.toggle_flag(*pos)
 
-        # ----------------------------
-        # Update
-        # ----------------------------
-        if state == ScreenState.GAME:
-            keys = pygame.key.get_pressed()
+        keys = pygame.key.get_pressed()
 
-            # Player 1 movement (WASD)
-            dir1 = pygame.Vector2(0, 0)
-            if keys[pygame.K_w]:
-                dir1.y -= 1
-            if keys[pygame.K_s]:
-                dir1.y += 1
-            if keys[pygame.K_a]:
-                dir1.x -= 1
-            if keys[pygame.K_d]:
-                dir1.x += 1
+        # Player 1 movement (WASD)
+        dir1 = pygame.Vector2(0, 0)
+        if keys[pygame.K_w]:
+            dir1.y -= 1
+        if keys[pygame.K_s]:
+            dir1.y += 1
+        if keys[pygame.K_a]:
+            dir1.x -= 1
+        if keys[pygame.K_d]:
+            dir1.x += 1
 
-            # Player 2 movement (Arrow keys)
-            dir2 = pygame.Vector2(0, 0)
-            if keys[pygame.K_UP]:
-                dir2.y -= 1
-            if keys[pygame.K_DOWN]:
-                dir2.y += 1
-            if keys[pygame.K_LEFT]:
-                dir2.x -= 1
-            if keys[pygame.K_RIGHT]:
-                dir2.x += 1
+        # Player 2 movement (Arrow keys)
+        dir2 = pygame.Vector2(0, 0)
+        if keys[pygame.K_UP]:
+            dir2.y -= 1
+        if keys[pygame.K_DOWN]:
+            dir2.y += 1
+        if keys[pygame.K_LEFT]:
+            dir2.x -= 1
+        if keys[pygame.K_RIGHT]:
+            dir2.x += 1
 
-            player1.move(dir1, dt)
-            player2.move(dir2, dt)
+        player1.move(dir1, dt)
+        player2.move(dir2, dt)
 
-            player1.clamp_to_rect(screen_rect)
-            player2.clamp_to_rect(screen_rect)
+        player1.clamp_to_rect(screen_rect)
+        player2.clamp_to_rect(screen_rect)
 
-        # ----------------------------
-        # Rendering
-        # ----------------------------
-        screen.fill((30, 30, 30))
+        screen.fill(COLOR_BG)
 
-        if state == ScreenState.MENU:
-            _draw_centered_text(screen, "Multi-Mine", title_font, (240, 240, 240), 140)
-            start_y = 260
-            for i, item in enumerate(MENU_ITEMS):
-                color = (255, 220, 100) if i == menu_index else (200, 200, 200)
-                _draw_centered_text(screen, item, font, color, start_y + i * 50)
-            _draw_centered_text(
-                screen,
-                "Use arrows/W-S and Enter. Esc returns to menu.",
-                pygame.font.SysFont("consolas", 20),
-                (140, 140, 140),
-                SCREEN_HEIGHT - 40,
-            )
-        elif state == ScreenState.SETTINGS:
-            _draw_centered_text(screen, "Settings", title_font, (240, 240, 240), 160)
-            _draw_centered_text(
-                screen,
-                "Settings screen placeholder.",
-                font,
-                (200, 200, 200),
-                260,
-            )
-            _draw_centered_text(
-                screen,
-                "Press Esc to return to menu.",
-                pygame.font.SysFont("consolas", 20),
-                (140, 140, 140),
-                SCREEN_HEIGHT - 40,
-            )
-        else:
-            player1.draw(screen)
-            player2.draw(screen)
-            _draw_centered_text(
-                screen,
-                "Press Esc to return to menu.",
-                pygame.font.SysFont("consolas", 20),
-                (140, 140, 140),
-                SCREEN_HEIGHT - 40,
-            )
+        panel_rect = pygame.Rect(0, 0, SCREEN_WIDTH, GRID_OFFSET_Y)
+        pygame.draw.rect(screen, COLOR_PANEL, panel_rect)
+
+        score_text = font.render(
+            f"P1: {player1.score}   P2: {player2.score}",
+            True,
+            COLOR_TEXT,
+        )
+        screen.blit(score_text, (20, 20))
+
+        controls_text = font.render(
+            "P1: WASD + E reveal + Q flag | P2: Arrows + Enter reveal + RShift flag | R reset",
+            True,
+            COLOR_TEXT,
+        )
+        screen.blit(controls_text, (20, 45))
+
+        minefield.draw(screen)
+
+        p1_pos = _player_grid_pos(player1, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+        if p1_pos is not None:
+            minefield.draw_highlight(screen, *p1_pos)
+        p2_pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+        if p2_pos is not None:
+            minefield.draw_highlight(screen, *p2_pos)
+
+        player1.draw(screen)
+        player2.draw(screen)
 
         pygame.display.flip()
 

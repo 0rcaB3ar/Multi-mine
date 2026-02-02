@@ -1,0 +1,173 @@
+# src/game/grid/tiles.py
+from __future__ import annotations
+from dataclasses import dataclass
+from typing import Iterable, List, Tuple
+
+import pygame
+
+from config import (
+    COLOR_GRID_BG,
+    COLOR_TILE_FLAG,
+    COLOR_TILE_HIDDEN,
+    COLOR_TILE_HIGHLIGHT,
+    COLOR_TILE_MINE,
+    COLOR_TILE_REVEALED,
+)
+from src.game.logic.minesweeper import count_adjacent_mines, generate_mine_positions
+
+
+@dataclass
+class Tile:
+    row: int
+    col: int
+    is_mine: bool = False
+    adjacent_mines: int = 0
+    revealed: bool = False
+    flagged: bool = False
+
+
+class Minefield:
+    def __init__(
+        self,
+        rows: int,
+        cols: int,
+        tile_size: int,
+        mine_count: int,
+        offset: Tuple[int, int],
+    ) -> None:
+        self.rows = rows
+        self.cols = cols
+        self.tile_size = tile_size
+        self.mine_count = mine_count
+        self.offset_x, self.offset_y = offset
+
+        self.tiles: List[List[Tile]] = [
+            [Tile(r, c) for c in range(cols)] for r in range(rows)
+        ]
+
+        self._place_mines_and_counts()
+
+    def _place_mines_and_counts(self) -> None:
+        mine_positions = generate_mine_positions(
+            self.rows,
+            self.cols,
+            self.mine_count,
+        )
+        for r, c in mine_positions:
+            self.tiles[r][c].is_mine = True
+
+        for r in range(self.rows):
+            for c in range(self.cols):
+                if not self.tiles[r][c].is_mine:
+                    self.tiles[r][c].adjacent_mines = count_adjacent_mines(
+                        r,
+                        c,
+                        mine_positions,
+                        self.rows,
+                        self.cols,
+                    )
+
+    def reset(self) -> None:
+        for row in self.tiles:
+            for tile in row:
+                tile.is_mine = False
+                tile.adjacent_mines = 0
+                tile.revealed = False
+                tile.flagged = False
+        self._place_mines_and_counts()
+
+    def in_bounds(self, row: int, col: int) -> bool:
+        return 0 <= row < self.rows and 0 <= col < self.cols
+
+    def tile_at_grid(self, row: int, col: int) -> Tile | None:
+        if not self.in_bounds(row, col):
+            return None
+        return self.tiles[row][col]
+
+    def grid_from_pixel(self, x: float, y: float) -> Tuple[int, int] | None:
+        gx = int((x - self.offset_x) // self.tile_size)
+        gy = int((y - self.offset_y) // self.tile_size)
+        if not self.in_bounds(gy, gx):
+            return None
+        return (gy, gx)
+
+    def reveal_tile(self, row: int, col: int) -> str:
+        tile = self.tile_at_grid(row, col)
+        if tile is None:
+            return "out"
+        if tile.revealed or tile.flagged:
+            return "blocked"
+
+        tile.revealed = True
+        if tile.is_mine:
+            return "mine"
+
+        if tile.adjacent_mines == 0:
+            self._flood_reveal(row, col)
+
+        return "safe"
+
+    def _flood_reveal(self, row: int, col: int) -> None:
+        stack = [(row, col)]
+        visited = set(stack)
+
+        while stack:
+            cr, cc = stack.pop()
+            for nr in (cr - 1, cr, cr + 1):
+                for nc in (cc - 1, cc, cc + 1):
+                    if not self.in_bounds(nr, nc):
+                        continue
+                    if (nr, nc) in visited:
+                        continue
+                    neighbor = self.tiles[nr][nc]
+                    if neighbor.flagged or neighbor.is_mine:
+                        continue
+                    neighbor.revealed = True
+                    visited.add((nr, nc))
+                    if neighbor.adjacent_mines == 0:
+                        stack.append((nr, nc))
+
+    def toggle_flag(self, row: int, col: int) -> bool:
+        tile = self.tile_at_grid(row, col)
+        if tile is None or tile.revealed:
+            return False
+        tile.flagged = not tile.flagged
+        return True
+
+    def draw(self, surface: pygame.Surface) -> None:
+        grid_rect = pygame.Rect(
+            self.offset_x,
+            self.offset_y,
+            self.cols * self.tile_size,
+            self.rows * self.tile_size,
+        )
+        pygame.draw.rect(surface, COLOR_GRID_BG, grid_rect)
+
+        for row in self.tiles:
+            for tile in row:
+                x = self.offset_x + tile.col * self.tile_size
+                y = self.offset_y + tile.row * self.tile_size
+                rect = pygame.Rect(x, y, self.tile_size, self.tile_size)
+
+                if tile.revealed:
+                    if tile.is_mine:
+                        color = COLOR_TILE_MINE
+                    else:
+                        color = COLOR_TILE_REVEALED
+                else:
+                    color = COLOR_TILE_HIDDEN
+
+                pygame.draw.rect(surface, color, rect)
+                pygame.draw.rect(surface, (0, 0, 0), rect, 1)
+
+                if tile.flagged and not tile.revealed:
+                    flag_rect = rect.inflate(-self.tile_size * 0.4, -self.tile_size * 0.4)
+                    pygame.draw.rect(surface, COLOR_TILE_FLAG, flag_rect)
+
+    def draw_highlight(self, surface: pygame.Surface, row: int, col: int) -> None:
+        if not self.in_bounds(row, col):
+            return
+        x = self.offset_x + col * self.tile_size
+        y = self.offset_y + row * self.tile_size
+        rect = pygame.Rect(x, y, self.tile_size, self.tile_size)
+        pygame.draw.rect(surface, COLOR_TILE_HIGHLIGHT, rect, 2)
