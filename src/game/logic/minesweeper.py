@@ -10,17 +10,22 @@ def generate_mine_positions(
     cols: int,
     mine_count: int,
     rng: random.Random | None = None,
+    exclude: Iterable[Tuple[int, int]] | None = None,
 ) -> Set[Tuple[int, int]]:
+    excluded = set(exclude or [])
     if mine_count <= 0:
         return set()
-    if mine_count >= rows * cols:
-        raise ValueError("mine_count must be less than rows * cols")
+    if mine_count >= rows * cols - len(excluded):
+        raise ValueError("mine_count must be less than rows * cols minus excluded tiles")
 
     rng = rng or random.Random()
     positions: Set[Tuple[int, int]] = set()
 
     while len(positions) < mine_count:
-        positions.add((rng.randrange(rows), rng.randrange(cols)))
+        candidate = (rng.randrange(rows), rng.randrange(cols))
+        if candidate in excluded:
+            continue
+        positions.add(candidate)
 
     return positions
 

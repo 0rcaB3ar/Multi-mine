@@ -45,13 +45,25 @@ class Minefield:
             [Tile(r, c) for c in range(cols)] for r in range(rows)
         ]
 
+        self.state: str = "playing"
+        self.revealed_safe_count: int = 0
+        self.first_reveal_done: bool = False
+
         self._place_mines_and_counts()
 
-    def _place_mines_and_counts(self) -> None:
+    def _clear_mines_and_counts(self) -> None:
+        for row in self.tiles:
+            for tile in row:
+                tile.is_mine = False
+                tile.adjacent_mines = 0
+
+    def _place_mines_and_counts(self, exclude: Iterable[Tuple[int, int]] | None = None) -> None:
+        self._clear_mines_and_counts()
         mine_positions = generate_mine_positions(
             self.rows,
             self.cols,
             self.mine_count,
+            exclude=exclude,
         )
         for r, c in mine_positions:
             self.tiles[r][c].is_mine = True
@@ -70,10 +82,11 @@ class Minefield:
     def reset(self) -> None:
         for row in self.tiles:
             for tile in row:
-                tile.is_mine = False
-                tile.adjacent_mines = 0
                 tile.revealed = False
                 tile.flagged = False
+        self.state = "playing"
+        self.revealed_safe_count = 0
+        self.first_reveal_done = False
         self._place_mines_and_counts()
 
     def in_bounds(self, row: int, col: int) -> bool:
@@ -92,24 +105,51 @@ class Minefield:
         return (gy, gx)
 
     def reveal_tile(self, row: int, col: int) -> str:
+        if self.state != "playing":
+            return "blocked"
         tile = self.tile_at_grid(row, col)
         if tile is None:
             return "out"
-        if tile.revealed or tile.flagged:
+        if tile.flagged:
             return "blocked"
+
+        if not self.first_reveal_done:
+            self._place_mines_and_counts(exclude={(row, col)})
+            self.first_reveal_done = True
+            tile = self.tiles[row][col]
+
+        if tile.revealed:
+            return self._chord_reveal(row, col)
+
+        hit_mine, newly_revealed = self._reveal_from_click(row, col)
+        if hit_mine:
+            self.state = "lost"
+            self._reveal_all_mines()
+            return "mine"
+
+        self.revealed_safe_count += newly_revealed
+        self._check_win()
+        return "safe"
+
+    def _reveal_from_click(self, row: int, col: int) -> Tuple[bool, int]:
+        tile = self.tiles[row][col]
+        if tile.revealed or tile.flagged:
+            return (False, 0)
 
         tile.revealed = True
         if tile.is_mine:
-            return "mine"
+            return (True, 0)
 
+        newly_revealed = 1
         if tile.adjacent_mines == 0:
-            self._flood_reveal(row, col)
+            newly_revealed += self._flood_reveal(row, col)
 
-        return "safe"
+        return (False, newly_revealed)
 
-    def _flood_reveal(self, row: int, col: int) -> None:
+    def _flood_reveal(self, row: int, col: int) -> int:
         stack = [(row, col)]
         visited = set(stack)
+        revealed_count = 0
 
         while stack:
             cr, cc = stack.pop()
@@ -122,10 +162,65 @@ class Minefield:
                     neighbor = self.tiles[nr][nc]
                     if neighbor.flagged or neighbor.is_mine:
                         continue
+                    if neighbor.revealed:
+                        continue
                     neighbor.revealed = True
+                    revealed_count += 1
                     visited.add((nr, nc))
                     if neighbor.adjacent_mines == 0:
                         stack.append((nr, nc))
+
+        return revealed_count
+
+    def _chord_reveal(self, row: int, col: int) -> str:
+        tile = self.tiles[row][col]
+        if tile.adjacent_mines <= 0:
+            return "blocked"
+
+        flag_count = 0
+        for nr in (row - 1, row, row + 1):
+            for nc in (col - 1, col, col + 1):
+                if not self.in_bounds(nr, nc):
+                    continue
+                if self.tiles[nr][nc].flagged:
+                    flag_count += 1
+
+        if flag_count != tile.adjacent_mines:
+            return "blocked"
+
+        hit_mine = False
+        newly_revealed = 0
+        for nr in (row - 1, row, row + 1):
+            for nc in (col - 1, col, col + 1):
+                if not self.in_bounds(nr, nc):
+                    continue
+                if nr == row and nc == col:
+                    continue
+                revealed_mine, count = self._reveal_from_click(nr, nc)
+                newly_revealed += count
+                if revealed_mine:
+                    hit_mine = True
+
+        if hit_mine:
+            self.state = "lost"
+            self._reveal_all_mines()
+            return "mine"
+
+        if newly_revealed:
+            self.revealed_safe_count += newly_revealed
+            self._check_win()
+
+        return "safe"
+
+    def _reveal_all_mines(self) -> None:
+        for row in self.tiles:
+            for tile in row:
+                if tile.is_mine:
+                    tile.revealed = True
+
+    def _check_win(self) -> None:
+        if self.revealed_safe_count >= (self.rows * self.cols - self.mine_count):
+            self.state = "won"
 
     def toggle_flag(self, row: int, col: int) -> bool:
         tile = self.tile_at_grid(row, col)
@@ -134,7 +229,7 @@ class Minefield:
         tile.flagged = not tile.flagged
         return True
 
-    def draw(self, surface: pygame.Surface) -> None:
+    def draw(self, surface: pygame.Surface, font: pygame.font.Font | None = None) -> None:
         grid_rect = pygame.Rect(
             self.offset_x,
             self.offset_y,
@@ -159,6 +254,11 @@ class Minefield:
 
                 pygame.draw.rect(surface, color, rect)
                 pygame.draw.rect(surface, (0, 0, 0), rect, 1)
+
+                if tile.revealed and not tile.is_mine and tile.adjacent_mines > 0 and font:
+                    label = font.render(str(tile.adjacent_mines), True, (20, 20, 20))
+                    label_rect = label.get_rect(center=rect.center)
+                    surface.blit(label, label_rect)
 
                 if tile.flagged and not tile.revealed:
                     flag_rect = rect.inflate(-self.tile_size * 0.4, -self.tile_size * 0.4)
