@@ -6,11 +6,8 @@ from config import (
     COLOR_PANEL,
     COLOR_TEXT,
     FPS,
-    GRID_COLS,
     GRID_OFFSET_X,
     GRID_OFFSET_Y,
-    GRID_ROWS,
-    MINE_COUNT,
     MINE_PENALTY_POINTS,
     SAFE_REVEAL_POINTS,
     SCREEN_HEIGHT,
@@ -19,6 +16,28 @@ from config import (
 )
 from src.game.grid.tiles import Minefield
 from src.game.players.player import Player, PlayerConfig
+
+MAP_SIZES = [
+    ("Small", 12, 9, 20),
+    ("Medium", 16, 12, 30),
+    ("Large", 20, 15, 45),
+]
+
+
+def _map_config(name: str) -> tuple[int, int, int]:
+    for label, cols, rows, mines in MAP_SIZES:
+        if label == name:
+            return rows, cols, mines
+    return MAP_SIZES[1][2], MAP_SIZES[1][1], MAP_SIZES[1][3]
+
+
+def _change_map_size(current: str, direction: int) -> str:
+    labels = [label for label, _, _, _ in MAP_SIZES]
+    if current not in labels:
+        return labels[0]
+    idx = labels.index(current)
+    idx = (idx + direction) % len(labels)
+    return labels[idx]
 
 
 def _player_grid_pos(player: Player, offset_x: int, offset_y: int, tile_size: int) -> tuple[int, int] | None:
@@ -30,7 +49,7 @@ def _player_grid_pos(player: Player, offset_x: int, offset_y: int, tile_size: in
     return (gy, gx)
 
 
-def _setup_game() -> tuple[Player, Player, Minefield]:
+def _setup_game(rows: int, cols: int, mine_count: int) -> tuple[Player, Player, Minefield]:
     # Create players
     p1_config = PlayerConfig(name="Player 1")
     p2_config = PlayerConfig(name="Player 2")
@@ -48,10 +67,10 @@ def _setup_game() -> tuple[Player, Player, Minefield]:
     )
 
     minefield = Minefield(
-        rows=GRID_ROWS,
-        cols=GRID_COLS,
+        rows=rows,
+        cols=cols,
         tile_size=TILE_SIZE,
-        mine_count=MINE_COUNT,
+        mine_count=mine_count,
         offset=(GRID_OFFSET_X, GRID_OFFSET_Y),
     )
 
@@ -76,8 +95,9 @@ def main() -> None:
     minefield: Minefield | None = None
 
     state = "menu"
-    menu_items = ["Start Game", "Rules", "Quit"]
+    menu_items = ["Start Game", "Settings", "Rules", "Quit"]
     menu_index = 0
+    map_size_name = "Medium"
 
     running = True
     while running:
@@ -97,12 +117,22 @@ def main() -> None:
                     elif event.key == pygame.K_RETURN:
                         selection = menu_items[menu_index]
                         if selection == "Start Game":
-                            player1, player2, minefield = _setup_game()
+                            rows, cols, mines = _map_config(map_size_name)
+                            player1, player2, minefield = _setup_game(rows, cols, mines)
                             state = "game"
+                        elif selection == "Settings":
+                            state = "settings"
                         elif selection == "Rules":
                             state = "rules"
                         elif selection == "Quit":
                             running = False
+                elif state == "settings":
+                    if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                        state = "menu"
+                    elif event.key == pygame.K_LEFT:
+                        map_size_name = _change_map_size(map_size_name, -1)
+                    elif event.key == pygame.K_RIGHT:
+                        map_size_name = _change_map_size(map_size_name, 1)
                 elif state == "rules":
                     if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                         state = "menu"
@@ -153,6 +183,19 @@ def main() -> None:
 
             hint = font.render("Use Up/Down + Enter. Esc to quit.", True, COLOR_TEXT)
             screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 420))
+
+        elif state == "settings":
+            title = title_font.render("Settings", True, COLOR_TEXT)
+            screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 80))
+
+            label = font.render("Map Size", True, COLOR_TEXT)
+            screen.blit(label, (240, 260))
+
+            value = menu_font.render(map_size_name, True, (255, 255, 255))
+            screen.blit(value, (520, 252))
+
+            hint = font.render("Left/Right to change. Esc/Backspace to return.", True, COLOR_TEXT)
+            screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 620))
 
         elif state == "rules":
             title = title_font.render("Rules / Features", True, COLOR_TEXT)
