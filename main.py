@@ -86,6 +86,7 @@ def main() -> None:
     font = pygame.font.SysFont(None, 24)
     title_font = pygame.font.SysFont(None, 48)
     menu_font = pygame.font.SysFont(None, 30)
+    menu_font_selected = pygame.font.SysFont(None, 36)
 
     # Screen bounds for clamping players
     screen_rect = screen.get_rect()
@@ -175,10 +176,18 @@ def main() -> None:
             screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 120))
 
             for idx, label in enumerate(menu_items):
-                color = (255, 255, 255) if idx == menu_index else COLOR_TEXT
-                text = menu_font.render(label, True, color)
+                is_selected = idx == menu_index
+                color = (255, 255, 255) if is_selected else COLOR_TEXT
+                font_to_use = menu_font_selected if is_selected else menu_font
+                text = font_to_use.render(label, True, color)
                 x = SCREEN_WIDTH // 2 - text.get_width() // 2
                 y = 260 + idx * 40
+
+                if is_selected:
+                    highlight_rect = pygame.Rect(x - 80, y - 8, text.get_width() + 160, text.get_height() + 16)
+                    pygame.draw.rect(screen, COLOR_PANEL, highlight_rect, border_radius=6)
+                    pygame.draw.rect(screen, (90, 110, 140), highlight_rect, 2, border_radius=6)
+
                 screen.blit(text, (x, y))
 
             hint = font.render("Use Up/Down + Enter. Esc to quit.", True, COLOR_TEXT)
