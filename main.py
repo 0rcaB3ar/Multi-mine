@@ -218,7 +218,7 @@ def main() -> None:
                 "Flag tiles to mark suspected mines.",
                 "Chord reveal: click a revealed number to open neighbors if flags match.",
                 "Numbers show adjacent mine counts.",
-                "Win when all safe tiles are revealed; loss shows all mines.",
+                "Win when all mines are flagged or revealed; mine hits just cost points.",
                 "Press R during a game to reset the field.",
             ]
 
@@ -278,10 +278,7 @@ def main() -> None:
             screen.blit(controls_text, (20, 45))
 
             if minefield.state == "won":
-                status_text = font.render("All safe tiles revealed! Press R to restart.", True, COLOR_TEXT)
-                screen.blit(status_text, (20, 60))
-            elif minefield.state == "lost":
-                status_text = font.render("Mine hit! Press R to restart.", True, COLOR_TEXT)
+                status_text = font.render("All mines found or flagged! Press R to restart.", True, COLOR_TEXT)
                 screen.blit(status_text, (20, 60))
 
             minefield.draw(screen, font=font)

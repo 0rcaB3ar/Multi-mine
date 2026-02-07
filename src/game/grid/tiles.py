@@ -122,14 +122,12 @@ class Minefield:
             return self._chord_reveal(row, col)
 
         hit_mine, newly_revealed = self._reveal_from_click(row, col)
-        if hit_mine:
-            self.state = "lost"
-            self._reveal_all_mines()
-            return "mine"
 
-        self.revealed_safe_count += newly_revealed
+        if newly_revealed:
+            self.revealed_safe_count += newly_revealed
+
         self._check_win()
-        return "safe"
+        return "mine" if hit_mine else "safe"
 
     def _reveal_from_click(self, row: int, col: int) -> Tuple[bool, int]:
         tile = self.tiles[row][col]
@@ -201,16 +199,11 @@ class Minefield:
                 if revealed_mine:
                     hit_mine = True
 
-        if hit_mine:
-            self.state = "lost"
-            self._reveal_all_mines()
-            return "mine"
-
         if newly_revealed:
             self.revealed_safe_count += newly_revealed
-            self._check_win()
 
-        return "safe"
+        self._check_win()
+        return "mine" if hit_mine else "safe"
 
     def _reveal_all_mines(self) -> None:
         for row in self.tiles:
@@ -219,8 +212,11 @@ class Minefield:
                     tile.revealed = True
 
     def _check_win(self) -> None:
-        if self.revealed_safe_count >= (self.rows * self.cols - self.mine_count):
-            self.state = "won"
+        for row in self.tiles:
+            for tile in row:
+                if tile.is_mine and not (tile.flagged or tile.revealed):
+                    return
+        self.state = "won"
 
     def toggle_flag(self, row: int, col: int) -> bool:
         tile = self.tile_at_grid(row, col)
