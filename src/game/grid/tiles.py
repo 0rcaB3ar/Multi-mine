@@ -51,6 +51,14 @@ class Minefield:
 
         self._place_mines_and_counts()
 
+    @property
+    def flagged_count(self) -> int:
+        return sum(1 for row in self.tiles for tile in row if tile.flagged)
+
+    @property
+    def remaining_mines_estimate(self) -> int:
+        return self.mine_count - self.flagged_count
+
     def _clear_mines_and_counts(self) -> None:
         for row in self.tiles:
             for tile in row:
@@ -219,10 +227,13 @@ class Minefield:
         self.state = "won"
 
     def toggle_flag(self, row: int, col: int) -> bool:
+        if self.state != "playing":
+            return False
         tile = self.tile_at_grid(row, col)
         if tile is None or tile.revealed:
             return False
         tile.flagged = not tile.flagged
+        self._check_win()
         return True
 
     def draw(self, surface: pygame.Surface, font: pygame.font.Font | None = None) -> None:

@@ -77,6 +77,14 @@ def _setup_game(rows: int, cols: int, mine_count: int) -> tuple[Player, Player, 
     return player1, player2, minefield
 
 
+def _winner_text(player1: Player, player2: Player) -> str:
+    if player1.score > player2.score:
+        return f"{player1.config.name} wins!"
+    if player2.score > player1.score:
+        return f"{player2.config.name} wins!"
+    return "It's a tie!"
+
+
 def main() -> None:
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
@@ -98,6 +106,8 @@ def main() -> None:
     state = "menu"
     menu_items = ["Start Game", "Settings", "Rules", "Quit"]
     menu_index = 0
+    game_over_items = ["Play Again", "Main Menu"]
+    game_over_index = 0
     map_size_name = "Medium"
 
     running = True
@@ -166,6 +176,21 @@ def main() -> None:
                         pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
                         if pos is not None:
                             minefield.toggle_flag(*pos)
+                elif state == "game_over":
+                    if event.key in (pygame.K_UP, pygame.K_w):
+                        game_over_index = (game_over_index - 1) % len(game_over_items)
+                    elif event.key in (pygame.K_DOWN, pygame.K_s):
+                        game_over_index = (game_over_index + 1) % len(game_over_items)
+                    elif event.key == pygame.K_RETURN:
+                        selection = game_over_items[game_over_index]
+                        if selection == "Play Again":
+                            rows, cols, mines = _map_config(map_size_name)
+                            player1, player2, minefield = _setup_game(rows, cols, mines)
+                            state = "game"
+                        elif selection == "Main Menu":
+                            state = "menu"
+                    elif event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
+                        state = "menu"
 
         keys = pygame.key.get_pressed()
 
@@ -270,16 +295,24 @@ def main() -> None:
             )
             screen.blit(score_text, (20, 20))
 
+            mines_text = font.render(
+                f"Flags: {minefield.flagged_count}/{minefield.mine_count}   "
+                f"Est. mines left: {minefield.remaining_mines_estimate}",
+                True,
+                COLOR_TEXT,
+            )
+            screen.blit(mines_text, (20, 70))
+
             controls_text = font.render(
                 "P1: WASD + E reveal + Q flag | P2: Arrows + Enter reveal + RShift flag | R reset | Esc menu",
                 True,
                 COLOR_TEXT,
             )
-            screen.blit(controls_text, (20, 45))
+            screen.blit(controls_text, (20, 95))
 
             if minefield.state == "won":
-                status_text = font.render("All mines found or flagged! Press R to restart.", True, COLOR_TEXT)
-                screen.blit(status_text, (20, 60))
+                state = "game_over"
+                game_over_index = 0
 
             minefield.draw(screen, font=font)
 
@@ -292,6 +325,35 @@ def main() -> None:
 
             player1.draw(screen)
             player2.draw(screen)
+        elif state == "game_over" and player1 is not None and player2 is not None:
+            title = title_font.render("Game Over", True, COLOR_TEXT)
+            screen.blit(title, (SCREEN_WIDTH // 2 - title.get_width() // 2, 100))
+
+            winner = menu_font_selected.render(_winner_text(player1, player2), True, (255, 255, 255))
+            screen.blit(winner, (SCREEN_WIDTH // 2 - winner.get_width() // 2, 180))
+
+            p1_score = menu_font.render(f"{player1.config.name}: {player1.score}", True, COLOR_TEXT)
+            p2_score = menu_font.render(f"{player2.config.name}: {player2.score}", True, COLOR_TEXT)
+            screen.blit(p1_score, (SCREEN_WIDTH // 2 - p1_score.get_width() // 2, 250))
+            screen.blit(p2_score, (SCREEN_WIDTH // 2 - p2_score.get_width() // 2, 290))
+
+            for idx, label in enumerate(game_over_items):
+                is_selected = idx == game_over_index
+                color = (255, 255, 255) if is_selected else COLOR_TEXT
+                font_to_use = menu_font_selected if is_selected else menu_font
+                text = font_to_use.render(label, True, color)
+                x = SCREEN_WIDTH // 2 - text.get_width() // 2
+                y = 390 + idx * 44
+
+                if is_selected:
+                    highlight_rect = pygame.Rect(x - 80, y - 8, text.get_width() + 160, text.get_height() + 16)
+                    pygame.draw.rect(screen, COLOR_PANEL, highlight_rect, border_radius=6)
+                    pygame.draw.rect(screen, (90, 110, 140), highlight_rect, 2, border_radius=6)
+
+                screen.blit(text, (x, y))
+
+            hint = font.render("Use Up/Down + Enter. Esc for main menu.", True, COLOR_TEXT)
+            screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 600))
 
         pygame.display.flip()
 
