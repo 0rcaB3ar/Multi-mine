@@ -95,16 +95,9 @@ python -m unittest -q
 |- README.md
 |- config.py
 |- main.py
-|- assets/
-|  |- BlueMan.png
-|  `- RedMan.png
 |- src/
 |  |- __init__.py
 |  `- game/
-|     |- __init.py
-|     |- effects/
-|     |  |- __init__.py
-|     |  `- status.py
 |     |- grid/
 |     |  |- __init__.py
 |     |  `- tiles.py
@@ -114,9 +107,6 @@ python -m unittest -q
 |     |- players/
 |     |  |- __init__.py
 |     |  `- player.py
-|     `- scoring/
-|        |- __init__.py
-|        `- scoreboard.py
 `- tests/
    |- __init__.py
    |- test__grid_tiles.py
@@ -125,5 +115,4 @@ python -m unittest -q
 
 ## Notes
 
-- `src/game/effects/status.py` and `src/game/scoring/scoreboard.py` are currently empty placeholders.
-- The package file at `src/game/__init.py` is named without the usual trailing underscore pair. The project still runs because imports target submodules directly.
+- Runtime code currently lives under `src/game/grid`, `src/game/logic`, and `src/game/players`.
