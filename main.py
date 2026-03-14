@@ -6,8 +6,6 @@ from config import (
     COLOR_PANEL,
     COLOR_TEXT,
     FPS,
-    GRID_OFFSET_X,
-    GRID_OFFSET_Y,
     MINE_PENALTY_POINTS,
     SAFE_REVEAL_POINTS,
     SCREEN_HEIGHT,
@@ -22,6 +20,19 @@ MAP_SIZES = [
     ("Medium", 16, 12, 30),
     ("Large", 20, 15, 45),
 ]
+HUD_HEIGHT = 140
+BOARD_TOP_MARGIN = 24
+
+
+def _layout_for_board(rows: int, cols: int) -> tuple[pygame.Rect, tuple[int, int]]:
+    board_width = cols * TILE_SIZE
+    board_height = rows * TILE_SIZE
+    offset_x = max((SCREEN_WIDTH - board_width) // 2, 0)
+    top_limit = HUD_HEIGHT + BOARD_TOP_MARGIN
+    available_height = SCREEN_HEIGHT - top_limit
+    offset_y = top_limit + max((available_height - board_height) // 2, 0)
+    board_rect = pygame.Rect(offset_x, offset_y, board_width, board_height)
+    return board_rect, (offset_x, offset_y)
 
 
 def _map_config(name: str) -> tuple[int, int, int]:
@@ -49,20 +60,22 @@ def _player_grid_pos(player: Player, offset_x: int, offset_y: int, tile_size: in
     return (gy, gx)
 
 
-def _setup_game(rows: int, cols: int, mine_count: int) -> tuple[Player, Player, Minefield]:
+def _setup_game(rows: int, cols: int, mine_count: int) -> tuple[Player, Player, Minefield, pygame.Rect]:
+    board_rect, board_offset = _layout_for_board(rows, cols)
+
     # Create players
     p1_config = PlayerConfig(name="Player 1")
     p2_config = PlayerConfig(name="Player 2")
 
     player1 = Player(
         config=p1_config,
-        start_pos=(GRID_OFFSET_X + 10, GRID_OFFSET_Y + 10),
+        start_pos=(board_rect.left + 10, board_rect.top + 10),
         color=(0, 200, 255),
     )
 
     player2 = Player(
         config=p2_config,
-        start_pos=(GRID_OFFSET_X + 200, GRID_OFFSET_Y + 10),
+        start_pos=(board_rect.right - p2_config.size[0] - 10, board_rect.top + 10),
         color=(255, 100, 100),
     )
 
@@ -71,10 +84,10 @@ def _setup_game(rows: int, cols: int, mine_count: int) -> tuple[Player, Player, 
         cols=cols,
         tile_size=TILE_SIZE,
         mine_count=mine_count,
-        offset=(GRID_OFFSET_X, GRID_OFFSET_Y),
+        offset=board_offset,
     )
 
-    return player1, player2, minefield
+    return player1, player2, minefield, board_rect
 
 
 def _winner_text(player1: Player, player2: Player) -> str:
@@ -96,12 +109,10 @@ def main() -> None:
     menu_font = pygame.font.SysFont(None, 30)
     menu_font_selected = pygame.font.SysFont(None, 36)
 
-    # Screen bounds for clamping players
-    screen_rect = screen.get_rect()
-
     player1: Player | None = None
     player2: Player | None = None
     minefield: Minefield | None = None
+    board_rect: pygame.Rect | None = None
 
     state = "menu"
     menu_items = ["Start Game", "Settings", "Rules", "Quit"]
@@ -129,7 +140,7 @@ def main() -> None:
                         selection = menu_items[menu_index]
                         if selection == "Start Game":
                             rows, cols, mines = _map_config(map_size_name)
-                            player1, player2, minefield = _setup_game(rows, cols, mines)
+                            player1, player2, minefield, board_rect = _setup_game(rows, cols, mines)
                             state = "game"
                         elif selection == "Settings":
                             state = "settings"
@@ -153,7 +164,7 @@ def main() -> None:
                     if event.key == pygame.K_r and minefield is not None:
                         minefield.reset()
                     if event.key == pygame.K_e and player1 is not None and minefield is not None:
-                        pos = _player_grid_pos(player1, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                        pos = _player_grid_pos(player1, minefield.offset_x, minefield.offset_y, TILE_SIZE)
                         if pos is not None:
                             result = minefield.reveal_tile(*pos)
                             if result == "safe":
@@ -161,11 +172,11 @@ def main() -> None:
                             elif result == "mine":
                                 player1.add_score(-MINE_PENALTY_POINTS)
                     if event.key == pygame.K_q and player1 is not None and minefield is not None:
-                        pos = _player_grid_pos(player1, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                        pos = _player_grid_pos(player1, minefield.offset_x, minefield.offset_y, TILE_SIZE)
                         if pos is not None:
                             minefield.toggle_flag(*pos)
                     if event.key == pygame.K_RETURN and player2 is not None and minefield is not None:
-                        pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                        pos = _player_grid_pos(player2, minefield.offset_x, minefield.offset_y, TILE_SIZE)
                         if pos is not None:
                             result = minefield.reveal_tile(*pos)
                             if result == "safe":
@@ -173,7 +184,7 @@ def main() -> None:
                             elif result == "mine":
                                 player2.add_score(-MINE_PENALTY_POINTS)
                     if event.key == pygame.K_RSHIFT and player2 is not None and minefield is not None:
-                        pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+                        pos = _player_grid_pos(player2, minefield.offset_x, minefield.offset_y, TILE_SIZE)
                         if pos is not None:
                             minefield.toggle_flag(*pos)
                 elif state == "game_over":
@@ -185,7 +196,7 @@ def main() -> None:
                         selection = game_over_items[game_over_index]
                         if selection == "Play Again":
                             rows, cols, mines = _map_config(map_size_name)
-                            player1, player2, minefield = _setup_game(rows, cols, mines)
+                            player1, player2, minefield, board_rect = _setup_game(rows, cols, mines)
                             state = "game"
                         elif selection == "Main Menu":
                             state = "menu"
@@ -256,7 +267,13 @@ def main() -> None:
             hint = font.render("Esc or Backspace to return to menu.", True, COLOR_TEXT)
             screen.blit(hint, (SCREEN_WIDTH // 2 - hint.get_width() // 2, 620))
 
-        elif state == "game" and player1 is not None and player2 is not None and minefield is not None:
+        elif (
+            state == "game"
+            and player1 is not None
+            and player2 is not None
+            and minefield is not None
+            and board_rect is not None
+        ):
             # Player 1 movement (WASD)
             dir1 = pygame.Vector2(0, 0)
             if keys[pygame.K_w]:
@@ -282,10 +299,10 @@ def main() -> None:
             player1.move(dir1, dt)
             player2.move(dir2, dt)
 
-            player1.clamp_to_rect(screen_rect)
-            player2.clamp_to_rect(screen_rect)
+            player1.clamp_to_rect(board_rect)
+            player2.clamp_to_rect(board_rect)
 
-            panel_rect = pygame.Rect(0, 0, SCREEN_WIDTH, GRID_OFFSET_Y)
+            panel_rect = pygame.Rect(0, 0, SCREEN_WIDTH, HUD_HEIGHT)
             pygame.draw.rect(screen, COLOR_PANEL, panel_rect)
 
             score_text = font.render(
@@ -308,7 +325,7 @@ def main() -> None:
                 True,
                 COLOR_TEXT,
             )
-            screen.blit(controls_text, (20, 95))
+            screen.blit(controls_text, (20, 104))
 
             if minefield.state == "won":
                 state = "game_over"
@@ -316,10 +333,10 @@ def main() -> None:
 
             minefield.draw(screen, font=font)
 
-            p1_pos = _player_grid_pos(player1, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+            p1_pos = _player_grid_pos(player1, minefield.offset_x, minefield.offset_y, TILE_SIZE)
             if p1_pos is not None:
                 minefield.draw_highlight(screen, *p1_pos)
-            p2_pos = _player_grid_pos(player2, GRID_OFFSET_X, GRID_OFFSET_Y, TILE_SIZE)
+            p2_pos = _player_grid_pos(player2, minefield.offset_x, minefield.offset_y, TILE_SIZE)
             if p2_pos is not None:
                 minefield.draw_highlight(screen, *p2_pos)
 
